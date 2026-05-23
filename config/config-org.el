@@ -263,12 +263,12 @@ helpers can be called as e.g. `plot_FUNC(df, savepath)`."
       (end-of-line))
     (open-line 3)
     (forward-line 1)
-    (insert (format (concat "#+BEGIN_SRC %s :results file graphics :file %s\n"
+    (insert (format (concat "#+BEGIN_SRC %s :results file drawer\n"
                             "savepath = \"%s\"\n"
-                            "plot_FUNC(df, savepath)\n"
+                            "print(plot_FUNC(df, filename=savepath))\n"
                             "#+END_SRC")
-                    lang img-rel-path img-rel-path))
-    (re-search-backward "^plot_FUNC" nil t)))
+                    lang img-rel-path))
+    (re-search-backward "^print(plot_FUNC" nil t)))
 
 (defun my/duplicate-src-block ()
   "Duplicate the current src block and insert it below."
