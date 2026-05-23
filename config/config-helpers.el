@@ -20,6 +20,37 @@
   :type 'string
   :group 'convenience)
 
+(defun my/--projects-dir ()
+  "Return the truename-normalized path to the monorepo's projects/ subdir."
+  (file-name-as-directory
+   (file-truename
+    (expand-file-name
+     my/notebook-monorepo-projects-subdir
+     (file-truename
+      (expand-file-name my/notebook-monorepo-root))))))
+
+(defun my/--list-subprojects ()
+  "Return a sorted list of sub-project directory names under projects/."
+  (let ((projects-dir (my/--projects-dir)))
+    (when (file-directory-p projects-dir)
+      (sort
+       (cl-remove-if-not
+        (lambda (name)
+          (file-directory-p (expand-file-name name projects-dir)))
+        (directory-files projects-dir nil "^[^.]"))
+       #'string<))))
+
+(defun my/--pick-subproject ()
+  "Prompt for a sub-project and return its absolute root path."
+  (let* ((projects-dir (my/--projects-dir))
+         (choices (my/--list-subprojects)))
+    (unless choices
+      (user-error "No sub-projects found under %s" projects-dir))
+    (file-name-as-directory
+     (expand-file-name
+      (completing-read "Sub-project: " choices nil t)
+      projects-dir))))
+
 (defun my/--current-subproject-root ()
   "Return the sub-project root for the current buffer, or nil.
 First trusts projectile if its root is a real sub-project under
@@ -63,19 +94,8 @@ Sub-project is inferred from the current buffer's path inside
 .projectile marker at the sub-project root and the notebooks/ subdir
 if either is missing."
   (interactive "sNotebook name: ")
-  (let* ((subroot
-          (or (my/--current-subproject-root)
-              (user-error
-               (concat "Cannot determine sub-project. "
-                       "buffer-file=%s, default-directory=%s, "
-                       "projectile-root=%s, monorepo=%s%s")
-               (or buffer-file-name "<none>")
-               default-directory
-               (or (and (fboundp 'projectile-project-root)
-                        (ignore-errors (projectile-project-root)))
-                   "<unset>")
-               my/notebook-monorepo-root
-               my/notebook-monorepo-projects-subdir)))
+  (let* ((subroot (or (my/--current-subproject-root)
+                      (my/--pick-subproject)))
          (projectile-marker (expand-file-name ".projectile" subroot))
          (notebooks-dir (file-name-as-directory
                          (expand-file-name "notebooks" subroot)))
