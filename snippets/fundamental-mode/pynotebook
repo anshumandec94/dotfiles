@@ -1,0 +1,38 @@
+
+# -*- mode: snippet -*-
+# name: Org Babel Template
+# key: babel
+# --
+#+STARTUP: showeverything
+* Notebook
+:PROPERTIES:
+:header-args:python: :session py-`(my/random-string 5)` :results output drawer :exports both :async yes :pandoc t
+:END:
+
+** Helper Functions
+
+#+NAME: helper-functions
+#+BEGIN_SRC python
+import sys
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Configuration
+plt.style.use('default')
+np.random.seed(42)
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.precision', 3)
+
+print(f"Python executable: {sys.executable}")
+print("Environment setup complete!")
+
+$0
+#+END_SRC
+
+** Work Done
+
+#+BEGIN_SRC python
+
+#+END_SRC
