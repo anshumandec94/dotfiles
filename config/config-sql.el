@@ -5,15 +5,22 @@
 (with-eval-after-load 'sql
   ;; Default dialect: postgres is the closest match to BigQuery's GoogleSQL
   ;; for keyword highlighting. Switch per-buffer with `M-x sql-set-product'.
-  (setq sql-product 'postgres)
+  (setq sql-product 'postgres))
 
-  ;; Set up keybindings for SQL mode.
-  ;; `=' alone calls `my/sqlfmt-dwim' which already handles region-if-active
-  ;; else whole buffer, so we don't need separate `==' / `=r' bindings.
-  ;; (Mixing them errors with "Key sequence = = starts with non-prefix key
-  ;; =" because `=' is a leaf binding and can't also act as a prefix.)
-  (spacemacs/set-leader-keys-for-major-mode 'sql-mode
-    "=" 'my/sqlfmt-dwim))
+;; The spacemacs LSP layer makes SPC m = a prefix with sub-keys (= b for
+;; lsp-format-buffer, = r for lsp-format-region, etc). `sql-ls' doesn't
+;; implement documentFormattingProvider so those error out. Override the
+;; sub-keys with our sqlfmt equivalents whenever lsp-mode activates in a
+;; sql-mode buffer. Appended (`t') so we run after lsp's own hook.
+(with-eval-after-load 'lsp-mode
+  (add-hook 'lsp-mode-hook
+            (lambda ()
+              (when (derived-mode-p 'sql-mode)
+                (spacemacs/set-leader-keys-for-major-mode 'sql-mode
+                  "=b" 'my/sqlfmt-buffer
+                  "=r" 'my/sqlfmt-region
+                  "=f" 'my/sqlfmt-dwim)))
+            t))
 
 ;; Global keybinding (your colleague's approach)
 (spacemacs/set-leader-keys "oS" 'my/sqlfmt-dwim)
