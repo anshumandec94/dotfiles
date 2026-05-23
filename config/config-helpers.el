@@ -21,21 +21,40 @@
   :group 'convenience)
 
 (defun my/--current-subproject-root ()
-  "Return the current sub-project root inside the monorepo, or nil.
-Inferred from `default-directory' as
-`<monorepo-root>/<projects-subdir>/<sub-project>/'."
-  (let* ((root (file-name-as-directory
-                (expand-file-name my/notebook-monorepo-root)))
+  "Return the sub-project root for the current buffer, or nil.
+First trusts projectile if its root is a real sub-project under
+`<monorepo>/<projects-subdir>/'. Otherwise infers from
+`default-directory'. All paths are normalized via `file-truename' so
+symlinks (e.g. /Users vs /private/Users) don't break the match."
+  (let* ((monorepo-root (file-name-as-directory
+                         (file-truename
+                          (expand-file-name my/notebook-monorepo-root))))
          (projects-dir (file-name-as-directory
-                        (expand-file-name my/notebook-monorepo-projects-subdir
-                                          root)))
-         (cwd (file-name-as-directory (expand-file-name default-directory))))
-    (when (string-prefix-p projects-dir cwd)
+                        (file-truename
+                         (expand-file-name
+                          my/notebook-monorepo-projects-subdir
+                          monorepo-root))))
+         (proj-root (when (fboundp 'projectile-project-root)
+                      (ignore-errors (projectile-project-root))))
+         (proj-root (when proj-root
+                      (file-name-as-directory
+                       (file-truename (expand-file-name proj-root)))))
+         (cwd (file-name-as-directory
+               (file-truename (expand-file-name default-directory)))))
+    (cond
+     ;; Projectile already points at a real sub-project (not the monorepo).
+     ((and proj-root
+           (string-prefix-p projects-dir proj-root)
+           (not (string= proj-root projects-dir))
+           (not (string= proj-root monorepo-root)))
+      proj-root)
+     ;; Infer from cwd: take the first path component after projects/.
+     ((string-prefix-p projects-dir cwd)
       (let* ((rel (substring cwd (length projects-dir)))
              (first-component (car (split-string rel "/" t))))
         (when first-component
           (file-name-as-directory
-           (expand-file-name first-component projects-dir)))))))
+           (expand-file-name first-component projects-dir))))))))
 
 (defun my/create-tmp-notebook (name)
   "Create a new Python notebook in the current sub-project's notebooks/ dir.
@@ -44,11 +63,19 @@ Sub-project is inferred from the current buffer's path inside
 .projectile marker at the sub-project root and the notebooks/ subdir
 if either is missing."
   (interactive "sNotebook name: ")
-  (let* ((subroot (or (my/--current-subproject-root)
-                      (user-error
-                       "Not inside a sub-project under %s%s"
-                       my/notebook-monorepo-root
-                       my/notebook-monorepo-projects-subdir)))
+  (let* ((subroot
+          (or (my/--current-subproject-root)
+              (user-error
+               (concat "Cannot determine sub-project. "
+                       "buffer-file=%s, default-directory=%s, "
+                       "projectile-root=%s, monorepo=%s%s")
+               (or buffer-file-name "<none>")
+               default-directory
+               (or (and (fboundp 'projectile-project-root)
+                        (ignore-errors (projectile-project-root)))
+                   "<unset>")
+               my/notebook-monorepo-root
+               my/notebook-monorepo-projects-subdir)))
          (projectile-marker (expand-file-name ".projectile" subroot))
          (notebooks-dir (file-name-as-directory
                          (expand-file-name "notebooks" subroot)))
