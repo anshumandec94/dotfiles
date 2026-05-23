@@ -32,7 +32,8 @@ This function should only modify configuration layer settings."
 
    ;; List of configuration layers to load.
    dotspacemacs-configuration-layers
-   '(sql
+   '(yaml
+     sql
      toml
      javascript
      ;; ----------------------------------------------------------------
@@ -44,7 +45,7 @@ This function should only modify configuration layer settings."
      ;; auto-completion
      ;; better-defaults
      emacs-lisp
-     git
+     ( git :variables git-enable-magit-svn-plugin t)
      helm
      (python :variables
              python-backend nil
@@ -250,7 +251,10 @@ It should only modify the values of Spacemacs settings."
    ;; List of themes, the first of the list is loaded when spacemacs starts.
    ;; Press `SPC T n' to cycle to the next theme in the list (works great
    ;; with 2 themes variants, one dark and one light)
-   dotspacemacs-themes '(spacemacs-dark
+   dotspacemacs-themes '(ef-dream
+                         doom-one
+                         kaolin-ocean
+                         spacemacs-dark
                          spacemacs-light)
 
    ;; Set the theme for the Spaceline. Supported themes are `spacemacs',
@@ -608,10 +612,13 @@ configuration.
 Put your configuration code here, except for variables that should be set
 before packages are loaded."
 
+  (load-file (expand-file-name "config/config-env.el" user-emacs-directory))
   (load-file (expand-file-name "config/config-python.el" user-emacs-directory))
   (load-file (expand-file-name "config/config-org.el" user-emacs-directory))
-
-
+  (load-file (expand-file-name "config/config-cursor.el" user-emacs-directory))
+  (load-file (expand-file-name "config/config-helpers.el" user-emacs-directory))
+  (load-file (expand-file-name "config/config-yasnippet.el" user-emacs-directory))
+  (load-file (expand-file-name "config/config-sql.el" user-emacs-directory))
   (custom-set-variables
    ;; custom-set-variables was added by Custom.
    ;; If you edit it by hand, you could mess it up, so be careful.
@@ -699,4 +706,83 @@ before packages are loaded."
 This is an auto-generated function, do not modify its content directly, use
 Emacs customize menu instead.
 This function is called at the very end of Spacemacs initialization."
+  (custom-set-variables
+   ;; custom-set-variables was added by Custom.
+   ;; If you edit it by hand, you could mess it up, so be careful.
+   ;; Your init file should contain only one such instance.
+   ;; If there is more than one, they won't work right.
+   '(dired-listing-switches "-alh")
+   '(package-selected-packages
+     '(ace-link afternoon-theme aggressive-indent alect-themes all-the-icons
+                auto-compile auto-highlight-symbol auto-yasnippe
+                avy-jump-helm-line badwolf-theme birds-of-paradise-plus-theme
+                browse-at-remote bubbleberry-theme busybee-theme
+                centered-cursor-mode cherry-blossom-theme chocolate-theme
+                clean-aindent-mode clues-theme code-cells code-review
+                color-theme-sanityinc-solarized color-theme-sanityinc-tomorrow
+                column-enforce-mode company-anaconda conda copilot copilot-chat
+                cyberpunk-theme cython-mode dakrone-theme darkmine-theme
+                darkokai-theme darktooth-theme define-word devdocs diff-hl
+                diminish dired-quick-sort disable-mouse django-theme doom-themes
+                dotenv-mode dracula-theme drag-stuff dumb-jump eat edit-indirect
+                ef-themes elisp-def elisp-demos elisp-slime-nav emr esh-help
+                eshell-prompt-extras eshell-z espresso-theme eval-sexp-fu
+                evil-anzu evil-args evil-cleverparens evil-collection
+                evil-easymotion evil-escape evil-evilified-state evil-exchange
+                evil-goggles evil-iedit-state evil-indent-plus evil-lion
+                evil-lisp-state evil-matchit evil-mc evil-nerd-commenter
+                evil-numbers evil-org evil-snipe evil-surround evil-textobj-line
+                evil-tutor evil-unimpaired evil-visual-mark-mode evil-visualstar
+                exotica-theme expand-region eyebrowse eziam-themes fancy-battery
+                farmhouse-themes flatland-theme flatui-theme flycheck-elsa
+                flycheck-package flycheck-pos-tip gandalf-theme gh-md git-link
+                git-messenger git-modes git-timemachine gitignore-templates
+                gnuplot golden-ratio google-translate gotham-theme
+                grandshell-theme gruber-darker-theme gruvbox-theme
+                hc-zenburn-theme helm-ag helm-c-yasnippet helm-comint helm-company
+                helm-descbinds helm-ls-git helm-lsp helm-make helm-mode-manager
+                helm-org helm-org-rifle helm-projectile helm-purpose helm-pydoc
+                helm-swoop helm-xref hemisu-theme heroku-theme hide-comnt
+                highlight-indentation highlight-numbers highlight-parentheses
+                hl-todo holy-mode htmlize hungry-delete hybrid-mode indent-guide
+                info+ inkpot-theme inspector ir-black-theme jazz-theme
+                jbeans-theme js-doc js2-refactor json-mode json-navigator
+                json-reformat jupyter kaolin-themes light-soap-theme link-hint
+                live-py-mode livid-mode lorem-ipsum lsp-mode lsp-origami
+                lsp-pyright lsp-treemacs lsp-ui lush-theme macrostep
+                madhat2r-theme magit-svn markdown-toc material-theme minimal-theme
+                moe-theme molokai-theme monochrome-theme monokai-theme multi-line
+                multi-term multi-vterm mustang-theme nameless naquadah-theme
+                noctilux-theme nodejs-repl npm-mode obsidian-theme
+                occidental-theme oldlace-theme omtose-phellack-themes
+                open-junk-file org-cliplink org-contrib org-download org-mime
+                org-pomodoro org-present org-projectile org-rich-yank
+                org-superstar organic-green-theme orgit-forge origami overseer
+                page-break-lines paradox password-generator pcre2el
+                phoenix-dark-mono-theme phoenix-dark-pink-theme pip-requirements
+                pipenv pippel planet-theme poetry popwin prettier-js
+                professional-theme purple-haze-theme py-isort pydoc pyenv-mode
+                pylookup python-pytest quickrun railscasts-theme
+                rainbow-delimiters rebecca-theme restart-emacs reverse-theme
+                seti-theme shell-pop smeargle smyx-theme soft-charcoal-theme
+                soft-morning-theme soft-stone-theme solarized-theme soothe-theme
+                space-doc spacegray-theme spaceline spacemacs-purpose-popwin
+                spacemacs-whitespace-cleanup sphinx-doc sqlup-mode
+                string-edit-at-point string-inflection subatomic-theme
+                subatomic256-theme sublime-themes sunny-day-theme symbol-overlay
+                symon t tango-2-theme tango-plus-theme tangotango-theme tao-theme
+                term-cursor terminal-here tern toc-org toml-mode toxi-theme
+                treemacs-evil treemacs-icons-dired treemacs-magit treemacs-persp
+                treemacs-projectile twilight-anti-bright-theme
+                twilight-bright-theme twilight-theme ujelly-theme underwater-theme
+                undo-fu undo-fu-session uv-mode vi-tilde-fringe
+                volatile-highlights vundo web-beautify wgrep white-sand-theme
+                winum writeroom-mode ws-butler yasnippet-snippets
+                zen-and-art-theme zenburn-theme zonokai-emacs)))
+  (custom-set-faces
+   ;; custom-set-faces was added by Custom.
+   ;; If you edit it by hand, you could mess it up, so be careful.
+   ;; Your init file should contain only one such instance.
+   ;; If there is more than one, they won't work right.
+   )
   )
