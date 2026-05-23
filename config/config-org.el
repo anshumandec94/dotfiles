@@ -236,11 +236,15 @@
   (org-babel-execute-src-block)
   (org-babel-next-src-block))
 
-(defun my/add-plot-block-below ()
+(defun my/add-plot-block-below (name)
   "Add a plotting src block below current position.
-Plot saves to <notebook-dir>/images/<notebook-basename>/plot_<timestamp>.png.
-Creates the per-notebook image directory if missing."
-  (interactive)
+Prompts for NAME, the descriptive filename for the plot (no extension; .png
+is added automatically). Plot saves to
+<notebook-dir>/images/<notebook-basename>/<name>.png. Empty input falls back
+to a timestamped name. Creates the per-notebook image directory if missing.
+The inserted block exposes the path as a `savepath` Python variable so plot
+helpers can be called as e.g. `plot_FUNC(df, savepath)`."
+  (interactive "sPlot filename (no extension): ")
   (let* ((lang (or (car (org-babel-get-src-block-info)) "python"))
          (nb-file (or buffer-file-name
                       (user-error "Buffer is not visiting a file; cannot derive plot path")))
@@ -248,8 +252,10 @@ Creates the per-notebook image directory if missing."
          (nb-base (file-name-base nb-file))
          (rel-img-dir (concat "images/" nb-base "/"))
          (img-dir (expand-file-name rel-img-dir nb-dir))
-         (timestamp (format-time-string "%H%M%S"))
-         (img-rel-path (concat rel-img-dir "plot_" timestamp ".png")))
+         (filename (if (string-empty-p name)
+                       (concat "plot_" (format-time-string "%H%M%S"))
+                     name))
+         (img-rel-path (concat rel-img-dir filename ".png")))
     (unless (file-exists-p img-dir)
       (make-directory img-dir t))
     (if (org-babel-get-src-block-info)
@@ -258,14 +264,11 @@ Creates the per-notebook image directory if missing."
     (open-line 3)
     (forward-line 1)
     (insert (format (concat "#+BEGIN_SRC %s :results file graphics :file %s\n"
-                            "import matplotlib.pyplot as plt\n"
-                            "\n"
-                            "\n"
-                            "plt.savefig('%s', bbox_inches='tight', dpi=150)\n"
-                            "plt.close()\n"
+                            "savepath = \"%s\"\n"
+                            "plot_FUNC(df, savepath)\n"
                             "#+END_SRC")
                     lang img-rel-path img-rel-path))
-    (forward-line -4)))
+    (re-search-backward "^plot_FUNC" nil t)))
 
 (defun my/duplicate-src-block ()
   "Duplicate the current src block and insert it below."
