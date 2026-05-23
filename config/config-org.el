@@ -32,7 +32,16 @@
         '((:results . "output drawer")
           (:session . "main")
           (:exports . "both")
-          (:cache . "no"))))
+          (:cache . "no")))
+  ;; Add a hook to refresh inline images after executing a source block
+
+  (defun my/org-babel-refresh-inline-images ()
+    "Refresh inline images after executing a source block."
+    (when org-inline-image-overlays
+      (org-display-inline-images)))
+
+  (add-hook 'org-babel-after-execute-hook #'my/org-babel-refresh-inline-images)
+  )
 
 ;; Now define templates with backquote and comma
 (setq org-capture-templates
@@ -164,8 +173,120 @@
   (spacemacs/set-leader-keys-for-major-mode 'org-mode
     "oi" 'org-cliplink
     "'"  'org-edit-special
-    "," 'org-edit-src-exit))
+    "," 'org-edit-src-exit
+    ;; Create notebook and helper functions
+    "nn" 'my/create-tmp-notebook
+    "nh" 'my/goto-helper-functions
+    ;; Block management
+    "ba" 'my/add-src-block-above
+    "bb" 'my/add-src-block-below
+    "bd" 'my/delete-src-block
+    "be" 'my/execute-and-next
+    "bp" 'my/add-plot-block-below
+    "bc" 'my/duplicate-src-block
+    ;; Session management
+    "ss" 'my/org-start-python-session
+    "sb" 'org-babel-switch-to-session
+    "sr" 'my/org-send-region-to-session
+    )
+
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((python .t))))
 
 
+;; Source block management functions
+(defun my/add-src-block-above ()
+  "Add source block above current position."
+  (interactive)
+  (let ((lang (or (car (org-babel-get-src-block-info)) "python")))
+    (if (org-babel-get-src-block-info)
+        (goto-char (org-babel-where-is-src-block-head))
+      (beginning-of-line))
+    (open-line 2)
+    (insert (format "#+BEGIN_SRC %s\n\n#+END_SRC" lang))
+    (forward-line -1)))
 
+(defun my/add-src-block-below ()
+  "Add source block below current position."
+  (interactive)
+  (let ((lang (or (car (org-babel-get-src-block-info)) "python")))
+    (if (org-babel-get-src-block-info)
+        (org-babel-goto-src-block-result)
+      (end-of-line))
+    (open-line 3)
+    (forward-line 1)
+    (insert (format "#+BEGIN_SRC %s\n\n#+END_SRC" lang))
+    (forward-line -1)))
+
+(defun my/delete-src-block ()
+  "Delete current source block and its results."
+  (interactive)
+  (when (org-babel-get-src-block-info)
+    (org-babel-remove-result)
+    (let* ((info (org-babel-get-src-block-info))
+           (start (org-babel-where-is-src-block-head))
+           (body (org-element-property :end (org-element-at-point))))
+      (goto-char start)
+      (delete-region start body))))
+
+(defun my/execute-and-next ()
+  "Execute current block and move to next."
+  (interactive)
+  (org-babel-execute-src-block)
+  (org-babel-next-src-block))
+
+(defun my/add-plot-block-below ()
+  "Add a plotting src block below current position."
+  (interactive)
+  (let ((lang (or (car (org-babel-get-src-block-info)) "python")))
+    (if (org-babel-get-src-block-info)
+        (org-babel-goto-src-block-result)
+      (end-of-line))
+    (open-line 3)
+    (forward-line 1)
+    (insert (format "#+BEGIN_SRC %s :results file drawer\n\n#+END_SRC" lang))
+    (forward-line -1)))
+
+(defun my/duplicate-src-block ()
+  "Duplicate the current src block and insert it below."
+  (interactive)
+  (when (org-babel-get-src-block-info)
+    (let* ((element (org-element-at-point))
+           (start (org-element-property :begin element))
+           (end (org-element-property :end element))
+           (block-text (buffer-substring-no-properties start end)))
+      (goto-char end)
+      (open-line 1)
+      (insert block-text)
+      ;; position cursor inside new block
+      (search-backward "#+BEGIN_SRC")
+      (forward-line 1))))
+
+(defun my/org-start-python-session ()
+  "Start Python session from current org buffer and switch to it."
+  (interactive)
+  (save-excursion
+    (goto-char (point-min))
+    (org-babel-next-src-block)
+    (let* ((session-name (cdr (assq :session
+                                    (nth 2 (org-babel-get-src-block-info)))))
+           (session-buffer (org-babel-initiate-session session-name)))
+      (pop-to-buffer session-buffer))))
+
+(defun my/org-send-region-to-session (start end)
+  "Send selected region to the active Python session."
+  (interactive "r")
+  (let* ((session-name (save-excursion
+                         (goto-char (point-min))
+                         (org-babel-next-src-block)
+                         (cdr (assq :session
+                                    (nth 2 (org-babel-get-src-block-info))))))
+         (session-buffer (org-babel-initiate-session session-name))
+         (process (get-buffer-process session-buffer)))
+    (if process
+        (python-shell-send-string
+         (buffer-substring-no-properties start end)
+         process)
+      (user-error "No active process found in session buffer %s" session-buffer))))
 (provide 'config-org)

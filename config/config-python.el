@@ -3,7 +3,7 @@
 
 ;; Python interpreter setup
 (setq python-shell-interpreter "uv"
-      python-sheel-interpreter-args "run python -i")
+      python-shell-interpreter-args "run python")
 
 ;; pytest config to use uv
 (with-eval-after-load 'pytest
@@ -58,13 +58,40 @@
           (message "Buffer formatted with Ruff.")))))
   )
 
+(defun my/org-src-ruff-format-region-or-buffer ()
+  "Format the active region or the whole buffer in an org-src Python buffer using 'uv run ruff format -'."
+  (interactive)
+  (unless (derived-mode-p 'python-mode)
+    (user-error "Not in a Python buffer"))
+  (let* ((start (if (use-region-p) (region-beginning) (point-min)))
+         (end   (if (use-region-p) (region-end) (point-max)))
+         (region-str (buffer-substring-no-properties start end))
+         (formatted
+          (with-temp-buffer
+            (insert region-str)
+            (let ((exit-code
+                   (call-process-region (point-min) (point-max)
+                                        "uv" t t nil
+                                        "run" "ruff" "format" "-")))
+              (if (zerop exit-code)
+                  (buffer-string)
+                (user-error "Ruff format failed"))))))
+    (save-excursion
+      (goto-char start)
+      (delete-region start end)
+      (insert formatted))
+    (message "Formatted with Ruff.")))
+
+
 (with-eval-after-load 'python
   ;; Bind our formatter to SPC m = (not = =, just =)
   (spacemacs/set-leader-keys-for-major-mode 'python-mode
-    "rf" 'my/python-format-with-ruff)
+    "rf" 'my/python-format-with-ruff
+    "rb" 'my/org-src-ruff-format-region-or-buffer)
   ;; Add format-on-save
   (add-hook 'python-mode-hook
             (lambda ()
               (add-hook 'before-save-hook 'my/python-format-with-ruff nil t))))
+(setq python-shell-completion-native-enable nil)
 
 (provide 'config-python)
