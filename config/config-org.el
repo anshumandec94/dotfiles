@@ -237,16 +237,35 @@
   (org-babel-next-src-block))
 
 (defun my/add-plot-block-below ()
-  "Add a plotting src block below current position."
+  "Add a plotting src block below current position.
+Plot saves to <notebook-dir>/images/<notebook-basename>/plot_<timestamp>.png.
+Creates the per-notebook image directory if missing."
   (interactive)
-  (let ((lang (or (car (org-babel-get-src-block-info)) "python")))
+  (let* ((lang (or (car (org-babel-get-src-block-info)) "python"))
+         (nb-file (or buffer-file-name
+                      (user-error "Buffer is not visiting a file; cannot derive plot path")))
+         (nb-dir (file-name-directory nb-file))
+         (nb-base (file-name-base nb-file))
+         (rel-img-dir (concat "images/" nb-base "/"))
+         (img-dir (expand-file-name rel-img-dir nb-dir))
+         (timestamp (format-time-string "%H%M%S"))
+         (img-rel-path (concat rel-img-dir "plot_" timestamp ".png")))
+    (unless (file-exists-p img-dir)
+      (make-directory img-dir t))
     (if (org-babel-get-src-block-info)
         (org-babel-goto-src-block-result)
       (end-of-line))
     (open-line 3)
     (forward-line 1)
-    (insert (format "#+BEGIN_SRC %s :results file drawer\n\n#+END_SRC" lang))
-    (forward-line -1)))
+    (insert (format (concat "#+BEGIN_SRC %s :results file graphics :file %s\n"
+                            "import matplotlib.pyplot as plt\n"
+                            "\n"
+                            "\n"
+                            "plt.savefig('%s', bbox_inches='tight', dpi=150)\n"
+                            "plt.close()\n"
+                            "#+END_SRC")
+                    lang img-rel-path img-rel-path))
+    (forward-line -4)))
 
 (defun my/duplicate-src-block ()
   "Duplicate the current src block and insert it below."
