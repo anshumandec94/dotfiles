@@ -91,10 +91,16 @@
 ;; * Session management
 ;; ---------------------------------------------------------------------------
 
-;; Lower vterm's redraw timer so streaming agent output feels real-time
-;; (default 0.1s, slight CPU cost but no real downside on modern hardware).
+;; `vterm-timer-delay nil' is the canonical fix for "vterm output only
+;; refreshes when I press a key" (see emacs-libvterm issues #555, #605).
+;; Looking at `vterm--invalidate' in vterm.el: when `vterm-timer-delay'
+;; is non-nil it schedules redraws via a `run-with-timer' which on macOS
+;; doesn't reliably fire while Emacs is idle waiting for slow subprocess
+;; output. Setting this to nil makes vterm call `vterm--delayed-redraw'
+;; immediately and bypass the timer path. Slightly higher CPU during
+;; busy bursts but no perceptible cost on modern hardware.
 (with-eval-after-load 'vterm
-  (setq vterm-timer-delay 0.01))
+  (setq vterm-timer-delay nil))
 
 (defun cursor-agent--spawn (extra-args)
   "Spawn a fresh agent vterm with EXTRA-ARGS appended to `cursor-agent-args'.
