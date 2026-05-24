@@ -778,7 +778,8 @@ This function is called at the very end of Spacemacs initialization."
                 undo-fu undo-fu-session uv-mode vi-tilde-fringe
                 volatile-highlights vundo web-beautify wgrep white-sand-theme
                 winum writeroom-mode ws-butler yasnippet-snippets
-                zen-and-art-theme zenburn-theme zonokai-emacs)))
+                zen-and-art-theme zenburn-theme zonokai-emacs))
+   '(warning-suppress-types '((lsp-mode))))
   (custom-set-faces
    ;; custom-set-faces was added by Custom.
    ;; If you edit it by hand, you could mess it up, so be careful.
