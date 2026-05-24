@@ -69,6 +69,14 @@ Mirrors `my/sqlfmt-dwim'; bound on `= f' which LSP leaves unbound."
 ;; Keybinding: SPC m B r  (B = BigQuery; capital avoids LSP's lowercase
 ;; `b' backend prefix). Region is run if active, else the whole buffer.
 
+(defcustom my/sql-bq-extra-env '("STAGE=dev")
+  "Extra environment variables for `uv run python` BQ invocations.
+List of strings of the form \"NAME=VALUE\". Prepended to
+`process-environment' so they shadow any inherited values.
+`shared.core.config.get_shared_config' requires `STAGE' to be set."
+  :type '(repeat string)
+  :group 'sql)
+
 (defvar my/--sql-bq-script
   "import sys, os
 from shared.core.config import get_shared_config
@@ -145,7 +153,8 @@ data-strategy-models monorepo layout); falls back to `default-directory'."
 (defun my/--sql-bq-dry-run (sql-file project-root)
   "Run dry-run synchronously. Return total_bytes_processed (int).
 Signals a `user-error' on failure."
-  (let ((default-directory project-root))
+  (let ((default-directory project-root)
+        (process-environment (append my/sql-bq-extra-env process-environment)))
     (with-temp-buffer
       (let ((exit (call-process "uv" nil '(t t) nil
                                 "run" "python" "-c"
@@ -198,6 +207,7 @@ Signals a `user-error' on failure."
 (defun my/--sql-bq-run-async (sql-file project-root sql-buffer-name csv-path)
   "Spawn the BQ run script async; output appended to a side buffer."
   (let* ((default-directory project-root)
+         (process-environment (append my/sql-bq-extra-env process-environment))
          (out-name (format "*bq-result: %s*" sql-buffer-name))
          (out-buf (get-buffer-create out-name)))
     (with-current-buffer out-buf
