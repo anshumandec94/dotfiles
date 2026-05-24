@@ -613,6 +613,7 @@ Put your configuration code here, except for variables that should be set
 before packages are loaded."
 
   (load-file (expand-file-name "config/config-env.el" user-emacs-directory))
+  (load-file (expand-file-name "config/config-perf.el" user-emacs-directory))
   (load-file (expand-file-name "config/config-python.el" user-emacs-directory))
   (load-file (expand-file-name "config/config-org.el" user-emacs-directory))
   (load-file (expand-file-name "config/config-cursor.el" user-emacs-directory))

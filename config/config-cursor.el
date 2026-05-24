@@ -86,6 +86,11 @@
 ;; * Session management
 ;; ---------------------------------------------------------------------------
 
+;; Lower vterm's redraw timer so streaming agent output feels real-time
+;; (default 0.1s, slight CPU cost but no real downside on modern hardware).
+(with-eval-after-load 'vterm
+  (setq vterm-timer-delay 0.01))
+
 (defun cursor-agent-start ()
   "Start a new Cursor Agent session for the current project.
 If a session already exists, switch to it."
@@ -99,23 +104,36 @@ If a session already exists, switch to it."
                    (cons cursor-agent-program cursor-agent-args)
                    " ")))
         (require 'vterm)
-        (let ((vterm-buffer-name buf-name)
-              (vterm-shell (format "/bin/zsh -c '%s'" cmd)))
-          (vterm))
-        (cursor-agent--display-buffer (current-buffer))))))
+        ;; Create the vterm buffer manually so we get exactly one window.
+        ;; Calling `(vterm)' interactively pops the buffer to a window via
+        ;; `pop-to-buffer-same-window'; combined with our own
+        ;; `display-buffer-in-side-window' that produced the classic
+        ;; "agent appears in two windows" duplication.
+        ;; Use `setq-local' (not `let') for `vterm-shell' to avoid the
+        ;; lexical-binding pitfall where dynamic vs lexical scoping
+        ;; depends on whether vterm.el has been loaded yet.
+        (let ((new-buf (generate-new-buffer buf-name)))
+          (with-current-buffer new-buf
+            (setq-local vterm-shell (format "/bin/zsh -c '%s'" cmd))
+            (vterm-mode))
+          (cursor-agent--display-buffer new-buf))))))
 
 (defun cursor-agent-switch ()
-  "Switch to the Cursor Agent buffer, or start one if none exists."
+  "Toggle visibility / focus of the Cursor Agent buffer for this project.
+No session: start one. Session exists but not focused: focus it (display
+in side window if hidden). Already in the agent buffer: hide the side
+window (or `quit-window' if it's in a regular window)."
   (interactive)
   (let ((buf (cursor-agent--get-buffer)))
-    (if buf
-        (if (eq (current-buffer) buf)
-            ;; Already in agent buffer, go back to previous
-            (if (window-parameter (selected-window) 'window-side)
-                (delete-window)
-              (previous-buffer))
-          (cursor-agent--display-buffer buf))
-      (cursor-agent-start))))
+    (cond
+     ((not buf)
+      (cursor-agent-start))
+     ((not (eq (current-buffer) buf))
+      (cursor-agent--display-buffer buf))
+     ((window-parameter (selected-window) 'window-side)
+      (delete-window))
+     (t
+      (quit-window)))))
 
 (defun cursor-agent-kill ()
   "Kill the current project's agent session."
