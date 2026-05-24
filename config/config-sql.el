@@ -7,20 +7,42 @@
   ;; for keyword highlighting. Switch per-buffer with `M-x sql-set-product'.
   (setq sql-product 'postgres))
 
-;; The spacemacs LSP layer makes SPC m = a prefix with sub-keys (= b for
-;; lsp-format-buffer, = r for lsp-format-region, etc). `sql-ls' doesn't
-;; implement documentFormattingProvider so those error out. Override the
-;; sub-keys with our sqlfmt equivalents whenever lsp-mode activates in a
-;; sql-mode buffer. Appended (`t') so we run after lsp's own hook.
+;; The spacemacs LSP layer binds `SPC m = b' / `= r' on the lsp-mode
+;; *minor-mode* keymap (see layers/+tools/lsp/funcs.el `spacemacs/lsp-bind-keys').
+;; Minor-mode bindings beat major-mode bindings, so binding via
+;; `set-leader-keys-for-major-mode' is shadowed. We must override on the
+;; same minor-mode keymap. To avoid breaking format for python/ts/etc, we
+;; dispatch on `major-mode': sql-mode -> sqlfmt; other modes -> original
+;; lsp formatter.
+(defun my/sql-or-lsp-format-buffer ()
+  "Format buffer: `my/sqlfmt-buffer' in sql-mode, else `lsp-format-buffer'."
+  (interactive)
+  (if (derived-mode-p 'sql-mode)
+      (call-interactively #'my/sqlfmt-buffer)
+    (call-interactively #'lsp-format-buffer)))
+
+(defun my/sql-or-lsp-format-region (beg end)
+  "Format region: `my/sqlfmt-region' in sql-mode, else `lsp-format-region'."
+  (interactive "r")
+  (if (derived-mode-p 'sql-mode)
+      (my/sqlfmt-region beg end)
+    (lsp-format-region beg end)))
+
+(defun my/sql-format-dwim ()
+  "DWIM format in sql-mode (region if active else buffer); errors elsewhere.
+Mirrors `my/sqlfmt-dwim'; bound on `= f' which LSP leaves unbound."
+  (interactive)
+  (if (derived-mode-p 'sql-mode)
+      (call-interactively #'my/sqlfmt-dwim)
+    (user-error "`= f' is only configured for sql-mode")))
+
+;; `with-eval-after-load' runs after lsp-mode's `:config' block (where
+;; `spacemacs/lsp-bind-keys' lives), so our bindings overwrite LSP's.
 (with-eval-after-load 'lsp-mode
-  (add-hook 'lsp-mode-hook
-            (lambda ()
-              (when (derived-mode-p 'sql-mode)
-                (spacemacs/set-leader-keys-for-major-mode 'sql-mode
-                  "=b" 'my/sqlfmt-buffer
-                  "=r" 'my/sqlfmt-region
-                  "=f" 'my/sqlfmt-dwim)))
-            t))
+  (spacemacs/set-leader-keys-for-minor-mode 'lsp-mode
+    "=b" #'my/sql-or-lsp-format-buffer
+    "=r" #'my/sql-or-lsp-format-region
+    "=f" #'my/sql-format-dwim))
 
 ;; Global keybinding (your colleague's approach)
 (spacemacs/set-leader-keys "oS" 'my/sqlfmt-dwim)
