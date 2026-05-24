@@ -7,6 +7,11 @@
 
 ;;; Code:
 
+;; Silence byte-compile warning for `let'-bound `vterm-shell'. vterm.el
+;; declares it via `defcustom' (special), so `let' does dynamic binding
+;; at runtime; this `defvar' just informs the byte-compiler.
+(defvar vterm-shell)
+
 ;; ---------------------------------------------------------------------------
 ;; * Customization
 ;; ---------------------------------------------------------------------------
@@ -91,6 +96,33 @@
 (with-eval-after-load 'vterm
   (setq vterm-timer-delay 0.01))
 
+(defun cursor-agent--spawn (extra-args)
+  "Spawn a fresh agent vterm with EXTRA-ARGS appended to `cursor-agent-args'.
+If an agent buffer already exists for this project it is killed first so
+the new args take effect. Creates the vterm buffer manually to avoid the
+duplicate-window issue caused by interactive `(vterm)'."
+  (let* ((default-directory (cursor-agent--project-root))
+         (buf-name (cursor-agent--buffer-name))
+         (existing (cursor-agent--get-buffer)))
+    (when existing
+      (let ((win (get-buffer-window existing)))
+        (when win (delete-window win)))
+      (kill-buffer existing))
+    (require 'vterm)
+    (let* ((cmd-list (cons cursor-agent-program
+                           (append cursor-agent-args extra-args)))
+           (cmd (string-join cmd-list " "))
+           ;; `vterm-shell' MUST be dynamically bound (let, not setq-local).
+           ;; `vterm-mode' is `define-derived-mode' so it calls
+           ;; `kill-all-local-variables' during init, wiping any setq-local.
+           ;; `let' is fine because vterm.el's `defcustom' makes vterm-shell
+           ;; a special variable.
+           (vterm-shell (format "/bin/zsh -c '%s'" cmd))
+           (new-buf (generate-new-buffer buf-name)))
+      (with-current-buffer new-buf
+        (vterm-mode))
+      (cursor-agent--display-buffer new-buf))))
+
 (defun cursor-agent-start ()
   "Start a new Cursor Agent session for the current project.
 If a session already exists, switch to it."
@@ -98,25 +130,7 @@ If a session already exists, switch to it."
   (let ((buf (cursor-agent--get-buffer)))
     (if buf
         (cursor-agent--display-buffer buf)
-      (let* ((default-directory (cursor-agent--project-root))
-             (buf-name (cursor-agent--buffer-name))
-             (cmd (string-join
-                   (cons cursor-agent-program cursor-agent-args)
-                   " ")))
-        (require 'vterm)
-        ;; Create the vterm buffer manually so we get exactly one window.
-        ;; Calling `(vterm)' interactively pops the buffer to a window via
-        ;; `pop-to-buffer-same-window'; combined with our own
-        ;; `display-buffer-in-side-window' that produced the classic
-        ;; "agent appears in two windows" duplication.
-        ;; Use `setq-local' (not `let') for `vterm-shell' to avoid the
-        ;; lexical-binding pitfall where dynamic vs lexical scoping
-        ;; depends on whether vterm.el has been loaded yet.
-        (let ((new-buf (generate-new-buffer buf-name)))
-          (with-current-buffer new-buf
-            (setq-local vterm-shell (format "/bin/zsh -c '%s'" cmd))
-            (vterm-mode))
-          (cursor-agent--display-buffer new-buf))))))
+      (cursor-agent--spawn nil))))
 
 (defun cursor-agent-switch ()
   "Toggle visibility / focus of the Cursor Agent buffer for this project.
@@ -150,6 +164,116 @@ window (or `quit-window' if it's in a regular window)."
   (interactive)
   (cursor-agent-kill)
   (cursor-agent-start))
+
+;; ---------------------------------------------------------------------------
+;; * Session resume (pick a previous chat)
+;; ---------------------------------------------------------------------------
+;; Cursor stores transcripts at:
+;;   ~/.cursor/projects/<encoded-project>/agent-transcripts/<chatId>/<chatId>.jsonl
+;; where <encoded-project> is the workspace path with `/' `.' `_' replaced
+;; by `-' (leading separator dropped). We list those, show first user
+;; prompt as a preview, and run `agent --resume <chatId>'.
+
+(defun cursor-agent--encode-project-path (path)
+  "Encode PATH to the form Cursor uses under ~/.cursor/projects/.
+Replaces `/', `.', and `_' with `-', collapses consecutive `-', and
+drops leading separators (e.g. /Users/x/.emacs.d -> Users-x-emacs-d)."
+  (let* ((step1 (replace-regexp-in-string "[/._]" "-" path))
+         (step2 (replace-regexp-in-string "-+" "-" step1)))
+    (replace-regexp-in-string "^-+" "" step2)))
+
+(defun cursor-agent--sessions-dir (&optional project-root)
+  "Return the agent-transcripts dir for PROJECT-ROOT (default: current)."
+  (let* ((root (or project-root (cursor-agent--project-root)))
+         (truename (directory-file-name
+                    (file-truename (expand-file-name root))))
+         (encoded (cursor-agent--encode-project-path truename)))
+    (expand-file-name
+     (format "~/.cursor/projects/%s/agent-transcripts/" encoded))))
+
+(defun cursor-agent--session-preview (jsonl-path)
+  "Return a short preview from the first user message in JSONL-PATH, or nil.
+Reads at most the first 16 KB so this stays cheap even for long transcripts."
+  (when (file-readable-p jsonl-path)
+    (with-temp-buffer
+      (insert-file-contents jsonl-path nil 0 16384)
+      (goto-char (point-min))
+      (catch 'found
+        (while (not (eobp))
+          (let* ((line (buffer-substring-no-properties
+                        (line-beginning-position) (line-end-position)))
+                 (json (ignore-errors
+                         (json-parse-string line :object-type 'alist))))
+            (when (and json (equal "user" (alist-get 'role json)))
+              (let* ((msg (alist-get 'message json))
+                     (content (alist-get 'content msg))
+                     (first (and (vectorp content)
+                                 (> (length content) 0)
+                                 (aref content 0)))
+                     (text (and first (alist-get 'text first))))
+                (when text
+                  ;; Prefer the <user_query> body (the actual user message)
+                  ;; over surrounding wrappers like <timestamp>...</timestamp>.
+                  (let ((start (string-match "<user_query>" text)))
+                    (when start
+                      (let* ((begin (+ start (length "<user_query>")))
+                             (end (string-match "</user_query>" text begin)))
+                        (when end
+                          (setq text (substring text begin end))))))
+                  (setq text (replace-regexp-in-string "<[^>]+>" "" text))
+                  (setq text (string-trim
+                              (replace-regexp-in-string "\\s-+" " " text)))
+                  (throw 'found text)))))
+          (forward-line 1))
+        nil))))
+
+(defun cursor-agent--list-sessions (&optional project-root)
+  "Return sessions for PROJECT-ROOT as a list of plists (newest first).
+Each plist has :id, :mtime, and :preview."
+  (let* ((dir (cursor-agent--sessions-dir project-root)))
+    (when (file-directory-p dir)
+      (let ((subdirs (directory-files dir t "\\`[a-f0-9-]+\\'" t)))
+        (sort
+         (mapcar
+          (lambda (sub)
+            (let* ((id (file-name-nondirectory sub))
+                   (jsonl (expand-file-name (format "%s.jsonl" id) sub))
+                   (mtime (file-attribute-modification-time
+                           (file-attributes
+                            (if (file-readable-p jsonl) jsonl sub))))
+                   (preview (cursor-agent--session-preview jsonl)))
+              (list :id id :mtime mtime :preview preview)))
+          subdirs)
+         (lambda (a b)
+           (time-less-p (plist-get b :mtime)
+                        (plist-get a :mtime))))))))
+
+(defun cursor-agent-resume ()
+  "Pick a previous Cursor Agent session for this project and resume it.
+Lists sessions newest-first with date + first-prompt preview, then spawns
+`agent --resume <chatId>' in the vterm side window."
+  (interactive)
+  (let* ((sessions (cursor-agent--list-sessions))
+         (_ (unless sessions
+              (user-error "No Cursor Agent sessions found for %s"
+                          (cursor-agent--project-root))))
+         (cands
+          (mapcar
+           (lambda (s)
+             (let* ((mtime (plist-get s :mtime))
+                    (date (format-time-string "%Y-%m-%d %H:%M" mtime))
+                    (preview (or (plist-get s :preview) "(no preview)"))
+                    (truncated (if (> (length preview) 80)
+                                   (concat (substring preview 0 77) "...")
+                                 preview))
+                    (label (format "[%s] %s" date truncated)))
+               (cons label s)))
+           sessions))
+         (pick (completing-read "Resume session: "
+                                (mapcar #'car cands) nil t))
+         (chosen (cdr (assoc pick cands)))
+         (chat-id (plist-get chosen :id)))
+    (cursor-agent--spawn (list "--resume" chat-id))))
 
 ;; ---------------------------------------------------------------------------
 ;; * Sending context to the agent
@@ -279,6 +403,8 @@ Left: current code buffer. Bottom-right: agent. Top-right: magit."
     "$ass" 'cursor-agent-start
     "$ask" 'cursor-agent-kill
     "$asr" 'cursor-agent-restart
+    ;; Capital R to resume a previous chat (picker on first prompt).
+    "$asR" 'cursor-agent-resume
 
     ;; Sending context
     "$axr" 'cursor-agent-send-region
