@@ -1,0 +1,49 @@
+---
+description: Read first when modifying this Spacemacs config. Captures repo layout, git workflow, testing protocol, and known footguns.
+alwaysApply: true
+---
+
+# Spacemacs Config Agent Guide
+
+This workspace (`~/.emacs.d`) is the user's personal Spacemacs installation. The user runs Emacs as their primary IDE and considers Spacemacs "brittle" — be cautious, incremental, test before committing. **Read this entire file before making any changes.**
+
+## Repo layout (critical)
+
+- `~/.emacs.d/` is the live Spacemacs install.
+- `~/.emacs.d/.spacemacs` and **everything under** `~/.emacs.d/config/` and `~/.emacs.d/snippets/` are **symlinks** to `~/dotfiles/`. Edit the dotfiles versions so changes are tracked.
+- Personal git repo: `~/dotfiles/` (remote `origin = git@github-personal:anshumandec94/dotfiles.git`). Used for cross-laptop sync.
+- Read `~/dotfiles/KNOWN_ISSUES.md` for active upstream bugs (NS Emacs subprocess freeze, etc.). When the user reports a symptom, check this file first before chasing it.
+
+## Git workflow
+
+Always: feature branch → commit → fast-forward `main` → push to `origin/main`. Never push directly to `main` mid-session. Commit messages: concise — one-line subject + brief body when useful. Don't commit unless explicitly asked.
+
+## Testing protocol
+
+- **DO** test elisp via `emacs -Q --batch --eval "(byte-compile-file \"path\")"`. Stub Spacemacs functions you need: `(defun spacemacs/declare-prefix (&rest _) nil)`, etc.
+- **DO NOT** run `emacs --daemon=...` — it wedges the shell harness on this machine and forces a session restart. Use `-Q --batch` for everything.
+- The user wants the agent to run tests itself, not paste manual instructions.
+- After config changes, tell the user whether a Spacemacs restart is required, and why, before they ask.
+
+## Spacemacs / Emacs Lisp footguns we've already hit
+
+- **LSP layer binds keys on the `lsp-mode` MINOR-mode keymap**, which shadows major-mode bindings. To override, use `spacemacs/set-leader-keys-for-minor-mode 'lsp-mode "..."` and dispatch on `major-mode` so other languages keep working. See `config/config-sql.el` for the pattern (`my/sql-or-lsp-format-buffer` etc).
+- **Capital-letter leader keys avoid LSP collisions.** LSP uses lowercase prefixes (`a`, `b`, `g`, `h`, `r`, `=`); `B`, `R`, `T` (already used) are mostly safe.
+- **`vterm-shell` MUST be `let`-bound, NEVER `setq-local`.** `vterm-mode` is a `define-derived-mode` and runs `kill-all-local-variables` BEFORE reading the variable. `let` is dynamic-bound (vterm.el `defcustom`s it) and survives. Add `(defvar vterm-shell)` at top of files using this pattern to silence false-positive byte-compile warnings under `lexical-binding: t`.
+- **`spacemacs/set-leader-keys-for-major-mode` cannot make `=` both a leaf and a prefix simultaneously.** That throws `Key sequence = = starts with non-prefix key =` and silently breaks the entire major-mode init (e.g. `.sql` files end up in `fundamental-mode`).
+- **Pre-existing typos / smells in the user's elisp** that we identified but the user explicitly chose NOT to fix: `(string = ...)` should be `(string= ...)`; duplicate `custom-set-variables` blocks; stray `t` in `package-selected-packages`; malformed `(python . t)` cons in `org-babel-load-languages`. **Do not "clean these up" without being asked.**
+
+## User-specific environment
+
+- Monorepo: `/Users/anara0823/Projects/data-strategy-models/`. Subprojects under `projects/<name>/`. Each has `pyproject.toml`, a `data/` folder, and uses `uv` for env management. `shared` package is installed in every subproject's venv.
+- `shared.core.config.get_shared_config()` requires `STAGE=dev` (or other) env var. When spawning subprocesses, prepend via `(let ((process-environment (append my/sql-bq-extra-env process-environment))) ...)`.
+- `cursor-agent` transcripts: `~/.cursor/projects/<encoded>/agent-transcripts/<chatId>/<chatId>.jsonl`. Encoding: replace `/` `.` `_` with `-`, collapse consecutive `-`, drop leading. See `cursor-agent--encode-project-path` in `config/config-cursor.el`.
+- Custom function naming: `my/foo` for user-facing, `my/--foo` (double-dash) for internals.
+
+## User preferences
+
+- Confirm plans before implementing risky changes; the user prefers testable, incremental commits over big-bang rewrites.
+- Minimize manual hassle for the user: do the git ops, run the tests, summarize the result.
+- Reject unsolicited cleanups. The user will explicitly call out what they want fixed.
+- Don't proactively create files (especially docs) unless asked.
+- After completing a feature, tell the user the keybinding(s), what to test, and any caveats.
